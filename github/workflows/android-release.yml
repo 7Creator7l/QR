@@ -1,0 +1,103 @@
+name: Build LUCHSHIY QR Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Release APK + AAB
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Create package.json
+        run: |
+          cat > package.json <<'EOF'
+          {
+            "name": "luchshiy-qr",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/core": "8.5.2",
+              "@capacitor/android": "8.5.2"
+            },
+            "devDependencies": {
+              "@capacitor/cli": "8.5.2"
+            }
+          }
+          EOF
+
+      - name: Create Capacitor config
+        run: |
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.luchshiy.qr",
+            "appName": "LUCHSHIY QR",
+            "webDir": "www",
+            "bundledWebRuntime": false
+          }
+          EOF
+
+      - name: Install Capacitor
+        run: npm install
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Android
+        run: npx cap sync android
+
+      - name: Build Release APK + AAB
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Collect files
+        run: |
+          mkdir -p release-files
+
+          cp android/app/build/outputs/apk/release/*.apk \
+            release-files/LUCHSHIY-QR-release.apk
+
+          cp android/app/build/outputs/bundle/release/*.aab \
+            release-files/LUCHSHIY-QR-release.aab
+
+      - name: Upload Release APK + AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: LUCHSHIY-QR-Release-AAB-APK
+          path: release-files/
+          if-no-files-found: error
+          retention-days: 30
